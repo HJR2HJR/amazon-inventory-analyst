@@ -1,0 +1,5 @@
+{
+  "name": "Amazon Inventory Analyst Pro",
+  "description": "A high-performance platform for analyzing Amazon inventory reports, featuring V2.4 AIS calculation logic, batch processing of TXT/CSV files, and automated visual report generation for teams and companies.",
+  "requestFramePermissions": []
+}
