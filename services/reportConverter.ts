@@ -1,18 +1,4 @@
 
-const CHINESE_HEADERS = [
-    "快照日期", "SKU", "FNSKU", "ASIN", "产品名称", "商品状况", "可用库存", "待移除库存",
-    "库存龄 0-90 天", "库存龄 91-180 天", "库存龄 181-270 天", "库存龄 271-365 天", "库存龄 365 天以上", "货币",
-    "7天销量", "30天销量", "60天销量", "90天销量", "警告", "你的售价", "销售价", "全新品最低含运价",
-    "二手最低价", "推荐操作", "售出率", "商品体积", "体积单位", "存储类型", "存储体积", "站点", "商品类型",
-    "销售排名", "供应天数", "预估超量库存", "30天周转周数", "90天周转周数", "特色优惠价",
-    "7天销售额", "30天销售额", "60天销售额", "90天销售额", "库存龄 0-30 天", "库存龄 31-60 天", "库存龄 61-90 天",
-    "库存龄 181-330 天", "库存龄 331-365 天", "下月预计仓储费", "入库中", "入库-处理中", "入库-已发货",
-    "入库-已接收", "预留库存总计", "不可售库存", "供应周数", "预估超量供应周数", "建议补货数量", "建议补货日期",
-    "AIS 271-300 天将收取费用数量", "AIS 271-300 天预估费用", "AIS 301-330 天将收取费用数量", "AIS 301-330 天预估费用",
-    "AIS 331-365 天将收取费用数量", "AIS 331-365 天预估费用", "AIS 365 天以上将收取费用数量", "AIS 365 天以上预估费用",
-    "库存龄快照日期", "FBA库存供应", "转运预留", "处理预留", "客户订单预留", "含在途库存的总供应天数"
-];
-
 const STORE_OWNER_MAP: Record<string, string> = {
     "aussie-warehouse": "Aussie-Warehouse-宋总",
     "aussievalue": "AussieValue-贺总",
@@ -80,8 +66,8 @@ function csvQuoteAll(value: any) {
 
 /**
  * Smartly converts TSV to CSV. If the input doesn't contain tabs, returns original.
- * If it does contain tabs, it replaces headers with standardized Chinese headers
- * if the column count matches, ensuring the analysis engine finds correct indices.
+ * If it does contain tabs, it preserves original headers so the analysis engine
+ * can read fields by name even when Amazon inserts or removes columns.
  */
 export function tsvToCsv(rawText: string): string {
     let cleanText = rawText;
@@ -107,11 +93,7 @@ export function tsvToCsv(rawText: string): string {
     const headerCells = dataLines[0].split('\t');
     const colCount = headerCells.length;
 
-    // Use standardized headers if column count matches Inventory Health Report (typically 65-70 cols)
-    // We check if it's at least 60 columns to be safe.
-    const headerCsv = (colCount >= 60 && colCount <= 80)
-        ? CHINESE_HEADERS.map(csvQuoteAll).join(',')
-        : headerCells.map(csvQuoteAll).join(',');
+    const headerCsv = headerCells.map(csvQuoteAll).join(',');
 
     const csvRows = [headerCsv];
 

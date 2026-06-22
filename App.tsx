@@ -60,7 +60,9 @@ export default function App() {
         header: false,
         skipEmptyLines: true,
         complete: (results) => {
-          resolve({ storeName: matchedName, data: results.data.slice(1) as any[][], type: 'inventory' });
+          const rows = results.data as any[][];
+          const headers = (rows[0] || []).map(cell => String(cell || '').trim());
+          resolve({ storeName: matchedName, headers, data: rows.slice(1), type: 'inventory' });
         },
         error: (error) => reject(error)
       });

@@ -10,6 +10,52 @@ const getNum = (val: any): number => {
   return isNaN(num) ? 0 : num;
 };
 
+const normalizeHeader = (header: any): string => String(header || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+const buildHeaderIndex = (headers: string[] = []) => {
+  const index = new Map<string, number>();
+  headers.forEach((header, i) => {
+    const normalized = normalizeHeader(header);
+    if (normalized && !index.has(normalized)) {
+      index.set(normalized, i);
+    }
+  });
+  return index;
+};
+
+const getByHeader = (
+  row: any[],
+  headerIndex: Map<string, number>,
+  aliases: string[],
+  fallbackIndex: number
+) => {
+  for (const alias of aliases) {
+    const idx = headerIndex.get(normalizeHeader(alias));
+    if (idx !== undefined) return row[idx];
+  }
+  return row[fallbackIndex];
+};
+
+const FIELD_ALIASES = {
+  sku: ['sku', 'SKU'],
+  asin: ['asin', 'ASIN'],
+  productName: ['product-name', '产品名称', '商品名称'],
+  age0To90: ['inv-age-0-to-90-days', '库存龄 0-90 天'],
+  age91To180: ['inv-age-91-to-180-days', '库存龄 91-180 天', '库存龄 90-180 天'],
+  age181To270: ['inv-age-181-to-270-days', '库存龄 181-270 天'],
+  age271To365: ['inv-age-271-to-365-days', '库存龄 271-365 天'],
+  age365Plus: ['inv-age-365-plus-days', '库存龄 365 天以上'],
+  inboundShipped: ['inbound-shipped', '入库-已发货'],
+  unitVolume: ['item-volume', '商品体积'],
+  storageType: ['storage-type', '存储类型'],
+  sales90d: ['units-shipped-t90', '90天销量'],
+  sellThrough: ['sell-through', '售出率'],
+  ais271To300Qty: ['quantity-to-be-charged-ais-271-300-days', 'AIS 271-300 天将收取费用数量'],
+  ais301To330Qty: ['quantity-to-be-charged-ais-301-330-days', 'AIS 301-330 天将收取费用数量'],
+  ais331To365Qty: ['quantity-to-be-charged-ais-331-365-days', 'AIS 331-365 天将收取费用数量'],
+  ais365PlusQty: ['quantity-to-be-charged-ais-365-plus-days', 'AIS 365 天以上将收取费用数量']
+};
+
 function calculateRemovalFee(storageType: string, weight_kg: number): number {
     const weight_g = weight_kg * 1000;
     if (storageType === '标准件') {
@@ -137,35 +183,37 @@ export function processAllData(
     });
   });
 
-  allInventory.forEach(({ storeName, data }) => {
+  allInventory.forEach(({ storeName, headers, data }) => {
     const mappedStoreName = STORE_NAME_MAPPING[storeName] || storeName;
     const nMapped = normStore(mappedStoreName);
+    const headerIndex = buildHeaderIndex(headers);
     
     data.forEach(row => {
-      // Relaxed column check: Inventory reports vary slightly but 60 is a safe threshold for AIS columns.
-      if (!row || row.length < 60) return;
+      if (!row || row.length === 0) return;
+      if (headerIndex.size === 0 && row.length < 60) return;
 
-      const summary_qty_0_90 = getNum(row[8]);
-      const summary_qty_90_180 = getNum(row[9]);
-      const summary_qty_181_270 = getNum(row[10]);
-      const summary_qty_271_365 = getNum(row[11]);
-      const summary_qty_over_365 = getNum(row[12]);
+      const summary_qty_0_90 = getNum(getByHeader(row, headerIndex, FIELD_ALIASES.age0To90, 8));
+      const summary_qty_90_180 = getNum(getByHeader(row, headerIndex, FIELD_ALIASES.age91To180, 9));
+      const summary_qty_181_270 = getNum(getByHeader(row, headerIndex, FIELD_ALIASES.age181To270, 10));
+      const summary_qty_271_365 = getNum(getByHeader(row, headerIndex, FIELD_ALIASES.age271To365, 11));
+      const summary_qty_over_365 = getNum(getByHeader(row, headerIndex, FIELD_ALIASES.age365Plus, 12));
 
       const totalInStock = summary_qty_0_90 + summary_qty_90_180 + summary_qty_181_270 + summary_qty_271_365 + summary_qty_over_365;
-      const inTransit = getNum(row[49]);
+      const inTransit = getNum(getByHeader(row, headerIndex, FIELD_ALIASES.inboundShipped, 49));
       if (totalInStock === 0 && inTransit === 0) return;
 
-      const asin = row[3];
+      const asin = String(getByHeader(row, headerIndex, FIELD_ALIASES.asin, 3) || '').trim();
+      if (!asin) return;
       // Store-aware matching with normalization
       const product = productInfo.find(p => p.ASIN === asin && normStore(p.店铺) === nMapped);
       const avgCost = product ? getNum(product['采购均价']) : 0;
-      const unitVolume = getNum(row[25]);
+      const unitVolume = getNum(getByHeader(row, headerIndex, FIELD_ALIASES.unitVolume, 25));
       const unitWeight = storageMap.get(`${asin}-${nMapped}`) || 0;
 
-      const ais_qty_271_300 = getNum(row[57]);
-      const ais_qty_301_330 = getNum(row[59]);
-      const ais_qty_331_365 = getNum(row[61]);
-      const ais_qty_over_365 = getNum(row[63]);
+      const ais_qty_271_300 = getNum(getByHeader(row, headerIndex, FIELD_ALIASES.ais271To300Qty, 57));
+      const ais_qty_301_330 = getNum(getByHeader(row, headerIndex, FIELD_ALIASES.ais301To330Qty, 59));
+      const ais_qty_331_365 = getNum(getByHeader(row, headerIndex, FIELD_ALIASES.ais331To365Qty, 61));
+      const ais_qty_over_365 = getNum(getByHeader(row, headerIndex, FIELD_ALIASES.ais365PlusQty, 63));
 
       const qty_0_90 = summary_qty_0_90;
       const qty_90_180 = summary_qty_90_180;
@@ -183,7 +231,8 @@ export function processAllData(
       const surcharge_over_365_aud = Math.max(ais_qty_over_365 * unitVolume * 370, ais_qty_over_365 * 0.12);
       const totalSurcharge_AU_aud = surcharge_271_300_aud + surcharge_301_330_aud + surcharge_331_365_aud + surcharge_over_365_aud;
 
-      const storageType = row[27] === 'Standard' ? '标准件' : '大件';
+      const rawStorageType = String(getByHeader(row, headerIndex, FIELD_ALIASES.storageType, 27) || '');
+      const storageType = rawStorageType === 'Standard' || rawStorageType === '标准件' ? '标准件' : '大件';
       const redundantVolume = redundantQty * unitVolume;
       const redundantBaseFee_AV_aud = storageType === '标准件' ? redundantVolume * 37 : redundantVolume * 34.20;
 
@@ -195,7 +244,7 @@ export function processAllData(
       const baseFeeAUD = storageType === '标准件' ? totalInStockVolume * 37 : totalInStockVolume * 34.20;
       const over270StockCount = ais_qty_271_300 + ais_qty_301_330 + ais_qty_331_365 + ais_qty_over_365;
 
-      const sales90d = getNum(row[17]);
+      const sales90d = getNum(getByHeader(row, headerIndex, FIELD_ALIASES.sales90d, 17));
       const dailySales = sales90d / 90;
       const overAgeMetrics = calculateClearanceMetrics(unitVolume, ais_qty_271_300, ais_qty_301_330, ais_qty_331_365, ais_qty_over_365, dailySales, AUD_TO_CNY_RATE);
 
@@ -208,14 +257,14 @@ export function processAllData(
         'ASIN': asin,
         '店铺名': mappedStoreName,
         '负责人': manager,
-        'SKU': row[1],
+        'SKU': getByHeader(row, headerIndex, FIELD_ALIASES.sku, 1),
         '品名': product ? product['品名'] : 'N/A',
-        '商品名称': row[4],
+        '商品名称': getByHeader(row, headerIndex, FIELD_ALIASES.productName, 4),
         '采购均价': avgCost,
         '单位体积': unitVolume,
         '仓储类型': storageType,
         '单位重量': unitWeight,
-        '当前售出率': getNum(row[24]),
+        '当前售出率': getNum(getByHeader(row, headerIndex, FIELD_ALIASES.sellThrough, 24)),
         '90天内的销量': sales90d,
         '在库货值': totalInStock * avgCost,
         '在库总数量': totalInStock,

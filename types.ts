@@ -9,6 +9,7 @@ export interface ProductInfo {
 
 export interface InventoryData {
   storeName: string;
+  headers: string[];
   data: any[][];
   type: 'inventory';
 }
