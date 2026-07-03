@@ -28,6 +28,93 @@ import { generateOperatorHtmlReport, ReportType } from './services/reportGenerat
 import { generateOverAgeHtmlReport } from './services/overAgeReportGenerator';
 import { processFileContent } from './services/reportConverter';
 
+const formatMonths = (value: number) => `${Math.max(1, Math.ceil(value))}月`;
+
+const parseEstimatedCost = (value: any): number => {
+  if (value === Infinity || value === 'Infinity') return Infinity;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : Infinity;
+  const text = String(value || '');
+  if (text.includes('∞') || text.includes('> 10年')) return Infinity;
+  const parsed = parseFloat(text.replace(/,/g, ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const getClearMonths = (value: number | string): number => {
+  if (value === Infinity || value === 'Infinity' || value === '∞') return Infinity;
+  const parsed = typeof value === 'number' ? value : parseFloat(String(value));
+  return Number.isFinite(parsed) ? parsed : Infinity;
+};
+
+const getCostAdvice = (row: ProcessedRow, prefix: string) => {
+  const estimatedCost = parseEstimatedCost(row.sellingCostCNY);
+  const threshold = (row.超龄货值 || 0) * 3 / 5;
+  if (!Number.isFinite(estimatedCost)) {
+    return `${prefix}，清货成本无限，考虑特殊处理，需关注`;
+  }
+  if (estimatedCost < threshold) {
+    return `${prefix}，清货超龄成本小于3/5货值，需关注`;
+  }
+  return `${prefix}，清货超龄成本大于等于3/5货值，考虑特殊处理，需关注`;
+};
+
+const getSheet2Advice = (row: ProcessedRow): string => {
+  const monthlySales = (row['90天内的销量'] || 0) / 3;
+  const inventoryToMonthlySales = monthlySales > 0 ? (row.在库总数量 || 0) / monthlySales : Infinity;
+  const clearMonths = getClearMonths(row.monthsToClear);
+  const overAgeStages = [
+    { key: '271-300库龄' as const, value: row['271-300库龄'] || 0 },
+    { key: '301-330库龄' as const, value: row['301-330库龄'] || 0 },
+    { key: '331-365库龄' as const, value: row['331-365库龄'] || 0 },
+    { key: '大于365库龄' as const, value: row['大于365库龄'] || 0 }
+  ];
+  const maxOverAgeStage = overAgeStages.reduce((max, current) => current.value > max.value ? current : max, overAgeStages[0]);
+
+  if (maxOverAgeStage.value <= 0) {
+    const age90To180 = row['90-180库龄'] || 0;
+    const age181To270 = row['181-270库龄'] || 0;
+    if (monthlySales <= 0 && (age90To180 > 0 || age181To270 > 0)) {
+      return '高货值冗余，售出接近0，强超龄风险，需关注';
+    }
+    if (age181To270 > age90To180) {
+      if (inventoryToMonthlySales <= 1) return '高货值冗余，售出快，无超龄风险，预计1月内卖完';
+      if (inventoryToMonthlySales <= 2.5) return `高货值冗余，售出一般，弱超龄风险，预计${formatMonths(inventoryToMonthlySales)}卖完，需提醒`;
+      return `高货值冗余，售出慢，强超龄风险，预计${formatMonths(inventoryToMonthlySales)}卖完，需关注`;
+    }
+    if (age90To180 > 0) {
+      if (inventoryToMonthlySales <= 1.5) return '高货值冗余，售出快，无超龄风险，预计1月内卖完';
+      if (inventoryToMonthlySales <= 4.5) return `高货值冗余，售出一般，弱超龄风险，预计${formatMonths(inventoryToMonthlySales)}卖完，需提醒`;
+      return `高货值冗余，售出慢，强超龄风险，预计${formatMonths(inventoryToMonthlySales)}卖完，需关注`;
+    }
+    return '无超龄风险';
+  }
+
+  if (!Number.isFinite(clearMonths)) {
+    const prefix = maxOverAgeStage.key === '大于365库龄'
+      ? '365+产品，售出接近0'
+      : '超龄产品，售出接近0，强365+风险';
+    return getCostAdvice(row, prefix);
+  }
+
+  if (maxOverAgeStage.key === '271-300库龄') {
+    if (clearMonths <= 1) return '超龄产品，售出快，无365+风险，预计1月内卖完';
+    if (clearMonths <= 3) return '超龄产品，售出一般，弱365+风险，需提醒';
+    return getCostAdvice(row, '超龄产品，售出一般，强365+风险');
+  }
+
+  if (maxOverAgeStage.key === '301-330库龄') {
+    if (clearMonths <= 1) return '超龄产品，售出快，无365+风险，预计1月内卖完';
+    if (clearMonths <= 2) return '超龄产品，售出一般，强365+风险，需提醒';
+    return getCostAdvice(row, '超龄产品，售出一般，强365+风险');
+  }
+
+  if (maxOverAgeStage.key === '331-365库龄') {
+    if (clearMonths <= 1) return '超龄产品，售出快，弱365+风险，预计1月内卖完';
+    return getCostAdvice(row, '超龄产品，售出一般，强365+风险');
+  }
+
+  return getCostAdvice(row, '365+产品');
+};
+
 export default function App() {
   const [productInfoFile, setProductInfoFile] = useState<File | null>(null);
   const [inventoryFiles, setInventoryFiles] = useState<File[]>([]);
@@ -145,6 +232,7 @@ export default function App() {
           entry['预估总超龄仓储费 (CNY)'] = formatInf(row.sellingCostCNY);
           entry['清完月数'] = formatInf(row.monthsToClear);
           entry['月均超龄仓储 (CNY)'] = formatInf(row.avgMonthlyCost);
+          entry['建议'] = getSheet2Advice(row);
           return entry;
         });
         const ws2 = XLSX.utils.json_to_sheet(sheet2Data);
