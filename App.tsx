@@ -301,17 +301,16 @@ export default function App() {
     if (result) {
       setLoading(true);
       try {
-        const zip = new JSZip();
         const displayData = getReportDisplayData(result.processedData);
         let count = 0;
 
-        zip.file('公司总报告/全公司_库存健康可视化报告.html', generateOperatorHtmlReport('全公司', displayData, 'company'));
+        saveAs(new Blob([generateOperatorHtmlReport('全公司', displayData, 'company')], { type: "text/html" }), '全公司_库存健康可视化报告.html');
         count++;
 
         Object.entries(OPERATORS).forEach(([group, members]) => {
           const groupData = displayData.filter(d => (members as string[]).includes(d['负责人']));
           if (groupData.length > 0) {
-            zip.file(`小组报告/${group}_库存健康可视化报告.html`, generateOperatorHtmlReport(group, groupData, 'group'));
+            saveAs(new Blob([generateOperatorHtmlReport(group, groupData, 'group')], { type: "text/html" }), `${group}_库存健康可视化报告.html`);
             count++;
           }
         });
@@ -319,14 +318,12 @@ export default function App() {
         Array.from(new Set(displayData.map(d => d['负责人']))).sort().forEach(op => {
           const opData = displayData.filter(d => d['负责人'] === op);
           if (opData.length > 0) {
-            zip.file(`个人报告/${op}_库存健康报告.html`, generateOperatorHtmlReport(op, opData, 'personal'));
+            saveAs(new Blob([generateOperatorHtmlReport(op, opData, 'personal')], { type: "text/html" }), `${op}_库存健康报告.html`);
             count++;
           }
         });
 
-        const content = await zip.generateAsync({ type: "blob" });
-        saveAs(content, "全部库存健康可视化报告.zip");
-        setStatus({ message: `已成功生成 ${count} 份可视化报告。`, type: 'success' });
+        setStatus({ message: `已开始下载 ${count} 份可视化报告。`, type: 'success' });
       } finally {
         setLoading(false);
       }
@@ -359,24 +356,21 @@ export default function App() {
     if (result) {
       setLoading(true);
       try {
-        const zip = new JSZip();
         const displayData = getReportDisplayData(result.processedData);
         let count = 0;
 
-        zip.file('公司超龄总表/超龄库存分析报告_全公司.html', generateOverAgeHtmlReport('全公司', displayData));
+        saveAs(new Blob([generateOverAgeHtmlReport('全公司', displayData)], { type: "text/html" }), '超龄库存分析报告_全公司.html');
         count++;
 
         Object.entries(OPERATORS).forEach(([group, members]) => {
           const groupData = displayData.filter(d => (members as string[]).includes(d['负责人']));
           if (groupData.length > 0) {
-            zip.file(`小组超龄总表/超龄库存分析报告_${group}.html`, generateOverAgeHtmlReport(group, groupData));
+            saveAs(new Blob([generateOverAgeHtmlReport(group, groupData)], { type: "text/html" }), `超龄库存分析报告_${group}.html`);
             count++;
           }
         });
 
-        const content = await zip.generateAsync({ type: "blob" });
-        saveAs(content, "全部超龄库存分析报告.zip");
-        setStatus({ message: `已成功生成 ${count} 份超龄库存报告。`, type: 'success' });
+        setStatus({ message: `已开始下载 ${count} 份超龄库存报告。`, type: 'success' });
       } finally {
         setLoading(false);
       }
