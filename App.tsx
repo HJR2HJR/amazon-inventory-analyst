@@ -28,7 +28,7 @@ import { generateOperatorHtmlReport, ReportType } from './services/reportGenerat
 import { generateOverAgeHtmlReport } from './services/overAgeReportGenerator';
 import { processFileContent } from './services/reportConverter';
 
-const formatMonths = (value: number) => `${Math.max(1, Math.ceil(value))}月`;
+const formatMonths = (value: number) => `${Math.max(1, Math.ceil(value))}月内`;
 
 const parseEstimatedCost = (value: any): number => {
   if (value === Infinity || value === 'Infinity') return Infinity;
@@ -59,7 +59,13 @@ const getCostAdvice = (row: ProcessedRow, prefix: string) => {
 
 const getSheet2Advice = (row: ProcessedRow): string => {
   const monthlySales = (row['90天内的销量'] || 0) / 3;
-  const inventoryToMonthlySales = monthlySales > 0 ? (row.在库总数量 || 0) / monthlySales : Infinity;
+  const redundantQty = (row['90-180库龄'] || 0)
+    + (row['181-270库龄'] || 0)
+    + (row['271-300库龄'] || 0)
+    + (row['301-330库龄'] || 0)
+    + (row['331-365库龄'] || 0)
+    + (row['大于365库龄'] || 0);
+  const inventoryToMonthlySales = monthlySales > 0 ? redundantQty / monthlySales : Infinity;
   const clearMonths = getClearMonths(row.monthsToClear);
   const overAgeStages = [
     { key: '271-300库龄' as const, value: row['271-300库龄'] || 0 },
