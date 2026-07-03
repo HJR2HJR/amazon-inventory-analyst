@@ -231,8 +231,8 @@ export function processAllData(
       const surcharge_over_365_aud = Math.max(ais_qty_over_365 * unitVolume * 370, ais_qty_over_365 * 0.12);
       const totalSurcharge_AU_aud = surcharge_271_300_aud + surcharge_301_330_aud + surcharge_331_365_aud + surcharge_over_365_aud;
 
-      const rawStorageType = String(getByHeader(row, headerIndex, FIELD_ALIASES.storageType, 27) || '');
-      const storageType = rawStorageType === 'Standard' || rawStorageType === '标准件' ? '标准件' : '大件';
+      const rawStorageType = String(getByHeader(row, headerIndex, FIELD_ALIASES.storageType, 27) || '').trim().toLowerCase();
+      const storageType = rawStorageType === 'oversize' || rawStorageType === '大件' ? '大件' : '标准件';
       const redundantVolume = redundantQty * unitVolume;
       const redundantBaseFee_AV_aud = storageType === '标准件' ? redundantVolume * 37 : redundantVolume * 34.20;
 
