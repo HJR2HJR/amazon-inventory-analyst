@@ -43,6 +43,7 @@ export interface ProcessedRow {
   超龄货值: number;
   超龄体积: number;
   冗余货值: number;
+  冗余体积: number;
   超龄单位仓储费: number;
   '0-90库龄': number;
   '90-180库龄': number;

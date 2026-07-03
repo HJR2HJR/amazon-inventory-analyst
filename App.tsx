@@ -257,6 +257,13 @@ export default function App() {
     }
   };
 
+  const getDisplayData = (data: ProcessedRow[]) => data.map(d => {
+    if (!d['负责人'] || String(d['负责人']).trim() === '') {
+      return { ...d, '负责人': '未匹配' };
+    }
+    return d;
+  });
+
   const handleDownloadPersonalReports = async () => {
     if (selectedOperators.length === 0) {
       setStatus({ message: '请先选择运营人员。', type: 'error' });
@@ -268,12 +275,7 @@ export default function App() {
       const zip = new JSZip();
       let count = 0;
       
-      const displayData = result.processedData.map(d => {
-        if (!d['负责人'] || String(d['负责人']).trim() === '') {
-          return { ...d, '负责人': '未匹配' };
-        }
-        return d;
-      });
+      const displayData = getDisplayData(result.processedData);
 
       selectedOperators.forEach(op => {
         const opData = displayData.filter(d => d['负责人'] === op);
@@ -293,6 +295,43 @@ export default function App() {
     }
   };
 
+  const handleDownloadAllVisualReports = async () => {
+    const result = await runAnalysis();
+    if (result) {
+      setLoading(true);
+      try {
+        const zip = new JSZip();
+        const displayData = getDisplayData(result.processedData);
+        let count = 0;
+
+        zip.file('公司总报告/全公司_库存健康可视化报告.html', generateOperatorHtmlReport('全公司', displayData, 'company'));
+        count++;
+
+        Object.entries(OPERATORS).forEach(([group, members]) => {
+          const groupData = displayData.filter(d => (members as string[]).includes(d['负责人']));
+          if (groupData.length > 0) {
+            zip.file(`小组报告/${group}_库存健康可视化报告.html`, generateOperatorHtmlReport(group, groupData, 'group'));
+            count++;
+          }
+        });
+
+        Array.from(new Set(displayData.map(d => d['负责人']))).sort().forEach(op => {
+          const opData = displayData.filter(d => d['负责人'] === op);
+          if (opData.length > 0) {
+            zip.file(`个人报告/${op}_库存健康报告.html`, generateOperatorHtmlReport(op, opData, 'personal'));
+            count++;
+          }
+        });
+
+        const content = await zip.generateAsync({ type: "blob" });
+        saveAs(content, "全部库存健康可视化报告.zip");
+        setStatus({ message: `已成功生成 ${count} 份可视化报告。`, type: 'success' });
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
   const handleDownloadVisualReport = async (type: ReportType) => {
     if (type === 'group' && !selectedGroupForHealth) {
         setStatus({ message: '请选择要导出的小组。', type: 'error' });
@@ -300,12 +339,7 @@ export default function App() {
     }
     const result = await runAnalysis();
     if (result) {
-        const displayData = result.processedData.map(d => {
-          if (!d['负责人'] || String(d['负责人']).trim() === '') {
-            return { ...d, '负责人': '未匹配' };
-          }
-          return d;
-        });
+        const displayData = getDisplayData(result.processedData);
 
         let dataToUse = displayData;
         let title = "全公司";
@@ -319,6 +353,35 @@ export default function App() {
     }
   };
 
+  const handleDownloadAllOverAgeReports = async () => {
+    const result = await runAnalysis();
+    if (result) {
+      setLoading(true);
+      try {
+        const zip = new JSZip();
+        const displayData = getDisplayData(result.processedData);
+        let count = 0;
+
+        zip.file('公司超龄总表/超龄库存分析报告_全公司.html', generateOverAgeHtmlReport('全公司', displayData));
+        count++;
+
+        Object.entries(OPERATORS).forEach(([group, members]) => {
+          const groupData = displayData.filter(d => (members as string[]).includes(d['负责人']));
+          if (groupData.length > 0) {
+            zip.file(`小组超龄总表/超龄库存分析报告_${group}.html`, generateOverAgeHtmlReport(group, groupData));
+            count++;
+          }
+        });
+
+        const content = await zip.generateAsync({ type: "blob" });
+        saveAs(content, "全部超龄库存分析报告.zip");
+        setStatus({ message: `已成功生成 ${count} 份超龄库存报告。`, type: 'success' });
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
   const handleDownloadOverAgeReport = async (scope: 'group' | 'all') => {
     if (scope === 'group' && !selectedGroupForOverAge) {
         setStatus({ message: '请选择一个小组。', type: 'error' });
@@ -326,12 +389,7 @@ export default function App() {
     }
     const result = await runAnalysis();
     if (result) {
-        const displayData = result.processedData.map(d => {
-          if (!d['负责人'] || String(d['负责人']).trim() === '') {
-            return { ...d, '负责人': '未匹配' };
-          }
-          return d;
-        });
+        const displayData = getDisplayData(result.processedData);
 
         let dataToUse = displayData;
         let title = "全公司";
@@ -512,13 +570,15 @@ export default function App() {
                         </button>
                     </div>
 
-                    <div className="space-y-2">
-                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">全公司总报告</span>
-                        <div className="h-[42px] flex items-center text-[11px] text-slate-400 italic">包含所有运营数据，支持二级筛选</div>
-                        <button onClick={() => handleDownloadVisualReport('company')} className="w-full py-3 bg-slate-800 text-white rounded-xl font-bold text-sm hover:bg-slate-900 transition-all">
-                            导出公司总可视化报告
-                        </button>
-                    </div>
+	                    <div className="space-y-2">
+	                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">全公司总报告</span>
+	                        <button onClick={handleDownloadAllVisualReports} className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all flex items-center justify-center gap-2">
+	                            <Download className="w-4 h-4" /> 导出所有可视化报告
+	                        </button>
+	                        <button onClick={() => handleDownloadVisualReport('company')} className="w-full py-3 bg-slate-800 text-white rounded-xl font-bold text-sm hover:bg-slate-900 transition-all">
+	                            导出公司总可视化报告
+	                        </button>
+	                    </div>
                 </div>
               </div>
 
@@ -542,10 +602,13 @@ export default function App() {
                             <Download className="w-4 h-4" /> 小组超龄报告
                         </button>
                     </div>
-                    <div className="flex items-end">
-                        <button onClick={() => handleDownloadOverAgeReport('all')} className="w-full py-3 bg-slate-700 text-white rounded-xl font-bold text-sm hover:bg-slate-800 transition-all flex items-center justify-center gap-2">
-                            <Download className="w-4 h-4" /> 公司超龄总表
-                        </button>
+	                    <div className="space-y-2">
+	                        <button onClick={handleDownloadAllOverAgeReports} className="w-full py-3 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-xl font-bold text-sm hover:bg-emerald-100 transition-all flex items-center justify-center gap-2">
+	                            <Download className="w-4 h-4" /> 导出所有超龄总表
+	                        </button>
+	                        <button onClick={() => handleDownloadOverAgeReport('all')} className="w-full py-3 bg-slate-700 text-white rounded-xl font-bold text-sm hover:bg-slate-800 transition-all flex items-center justify-center gap-2">
+	                            <Download className="w-4 h-4" /> 公司超龄总表
+	                        </button>
                     </div>
                 </div>
               </div>
