@@ -257,7 +257,8 @@ export default function App() {
     }
   };
 
-  const getDisplayData = (data: ProcessedRow[]) => data.map(d => {
+  // Reports group blank owners with unmatched items; Excel exports keep the raw owner value.
+  const getReportDisplayData = (data: ProcessedRow[]) => data.map(d => {
     if (!d['负责人'] || String(d['负责人']).trim() === '') {
       return { ...d, '负责人': '未匹配' };
     }
@@ -275,7 +276,7 @@ export default function App() {
       const zip = new JSZip();
       let count = 0;
       
-      const displayData = getDisplayData(result.processedData);
+      const displayData = getReportDisplayData(result.processedData);
 
       selectedOperators.forEach(op => {
         const opData = displayData.filter(d => d['负责人'] === op);
@@ -301,7 +302,7 @@ export default function App() {
       setLoading(true);
       try {
         const zip = new JSZip();
-        const displayData = getDisplayData(result.processedData);
+        const displayData = getReportDisplayData(result.processedData);
         let count = 0;
 
         zip.file('公司总报告/全公司_库存健康可视化报告.html', generateOperatorHtmlReport('全公司', displayData, 'company'));
@@ -339,7 +340,7 @@ export default function App() {
     }
     const result = await runAnalysis();
     if (result) {
-        const displayData = getDisplayData(result.processedData);
+        const displayData = getReportDisplayData(result.processedData);
 
         let dataToUse = displayData;
         let title = "全公司";
@@ -359,7 +360,7 @@ export default function App() {
       setLoading(true);
       try {
         const zip = new JSZip();
-        const displayData = getDisplayData(result.processedData);
+        const displayData = getReportDisplayData(result.processedData);
         let count = 0;
 
         zip.file('公司超龄总表/超龄库存分析报告_全公司.html', generateOverAgeHtmlReport('全公司', displayData));
@@ -389,7 +390,7 @@ export default function App() {
     }
     const result = await runAnalysis();
     if (result) {
-        const displayData = getDisplayData(result.processedData);
+        const displayData = getReportDisplayData(result.processedData);
 
         let dataToUse = displayData;
         let title = "全公司";
